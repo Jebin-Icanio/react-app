@@ -67,4 +67,37 @@ aws eks update-kubeconfig --name "$EKS_CLUSTER_NAME" --region "$AWS_REGION"
 envsubst '${REACT_IMAGE_URI}' < "$DEPLOYMENT_MANIFEST" | kubectl apply -f -
 kubectl apply -f "$SERVICE_MANIFEST"
 kubectl rollout status deployment/react-app --timeout=180s
-kubectl get service react-app
+
+KUBECTL_PATH="$(command -v kubectl)"
+sudo tee /etc/systemd/system/react-app-port-forward.service >/dev/null <<UNIT
+[Unit]
+Description=Public HTTP access to React app through EKS
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=ec2-user
+Environment=HOME=/home/ec2-user
+Environment=KUBECONFIG=/home/ec2-user/.kube/config
+Environment=PATH=/usr/local/bin:/usr/bin:/bin
+WorkingDirectory=/home/ec2-user
+ExecStart=${KUBECTL_PATH} port-forward --address 0.0.0.0 service/react-app 8000:80
+Restart=always
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target
+UNIT
+sudo systemctl daemon-reload
+sudo systemctl enable --now react-app-port-forward.service
+sudo systemctl --no-pager --full status react-app-port-forward.service
+
+IMDS_TOKEN="$(curl --fail --silent --show-error \
+  --request PUT \
+  --header 'X-aws-ec2-metadata-token-ttl-seconds: 60' \
+  http://169.254.169.254/latest/api/token)"
+DEPLOYER_IP="$(curl --fail --silent --show-error \
+  --header "X-aws-ec2-metadata-token: ${IMDS_TOKEN}" \
+  http://169.254.169.254/latest/meta-data/public-ipv4)"
+echo "React UI: http://${DEPLOYER_IP}:8000"
