@@ -3,11 +3,8 @@ kind: Service
 metadata:
   name: react-app
   namespace: default
-  annotations:
-    service.beta.kubernetes.io/aws-load-balancer-scheme: internet-facing
 spec:
-  type: LoadBalancer
-  loadBalancerClass: eks.amazonaws.com/nlb
+  type: ClusterIP
   selector:
     app: react-app
   ports:
